@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Faktura Processor - Dansk Omsorgspleje</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #0f172a;
+            --secondary: #1e293b;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --text: #1e293b;
+            --text-muted: #64748b;
+        }
+
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem;
+            background: var(--surface);
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 500;
+        }
+
+        .card {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .card:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transform: translateY(-2px);
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            background: var(--accent);
+            color: white;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            display: block;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .input-group input {
+            width: 100%;
+            padding: 0.875rem 1rem;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            font-size: 1rem;
+            font-family: 'JetBrains Mono', monospace;
+            transition: all 0.2s;
+            background: var(--bg);
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            background: var(--surface);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .dropzone {
+            border: 3px dashed var(--border);
+            border-radius: 16px;
+            padding: 3rem 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            background: var(--bg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .dropzone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.05) 0%, rgba(59, 130, 246, 0.1) 100%);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .dropzone:hover {
+            border-color: var(--accent);
+            background: var(--surface);
+            transform: scale(1.02);
+        }
+
+        .dropzone:hover::before {
+            opacity: 1;
+        }
+
+        .dropzone.dragover {
+            border-color: var(--accent);
+            background: rgba(59, 130, 246, 0.05);
+            border-style: solid;
+        }
+
+        .dropzone-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .dropzone-text {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 0.5rem;
+        }
+
+        .dropzone-hint {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg);
+            border-radius: 10px;
+            border: 2px solid var(--border);
+            margin-top: 1rem;
+        }
+
+        .file-icon {
+            width: 48px;
+            height: 48px;
+            background: var(--success);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .file-details {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 0.25rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+        }
+
+        .file-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.875rem 1.5rem;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            text-decoration: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 8px -1px rgba(59, 130, 246, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-block {
+            width: 100%;
+            justify-content: center;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .alert {
+            padding: 1rem 1.25rem;
+            border-radius: 10px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .alert-success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 2px solid #10b981;
+        }
+
+        .alert-error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 2px solid #ef4444;
+        }
+
+        .alert-icon {
+            font-size: 1.25rem;
+            flex-shrink: 0;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .stat-card {
+            background: var(--bg);
+            padding: 1.25rem;
+            border-radius: 10px;
+            border: 2px solid var(--border);
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--primary);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .card {
+                padding: 1.5rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📄 Faktura Processor</h1>
+            <p class="subtitle">Dansk Omsorgspleje ApS</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span>1</span>
+                Fakturanummer
+            </div>
+            <div class="input-group">
+                <label for="invoiceNumber">Indtast fakturanummer</label>
+                <input 
+                    type="text" 
+                    id="invoiceNumber" 
+                    placeholder="f.eks. 164"
+                    required
+                >
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span>2</span>
+                Upload Excel Fil
+            </div>
+            
+            <div class="dropzone" id="dropzone">
+                <div class="dropzone-icon">📊</div>
+                <div class="dropzone-text">Træk og slip Excel fil her</div>
+                <div class="dropzone-hint">eller klik for at vælge en fil (.xlsx)</div>
+            </div>
+            
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            
+            <div id="fileInfo" class="hidden"></div>
+            <div id="statsInfo" class="hidden"></div>
+        </div>
+
+        <div id="alertContainer"></div>
+
+        <button class="btn btn-primary btn-block" id="processBtn" disabled>
+            <span id="btnText">Generer PDF Faktura</span>
+            <span id="btnSpinner" class="spinner hidden"></span>
+        </button>
+    </div>
+
+    <script>
+        const dropzone = document.getElementById('dropzone');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const statsInfo = document.getElementById('statsInfo');
+        const processBtn = document.getElementById('processBtn');
+        const btnText = document.getElementById('btnText');
+        const btnSpinner = document.getElementById('btnSpinner');
+        const alertContainer = document.getElementById('alertContainer');
+        const invoiceNumberInput = document.getElementById('invoiceNumber');
+
+        let uploadedFile = null;
+        let processedData = null;
+
+        // Drag and drop handlers
+        dropzone.addEventListener('click', () => fileInput.click());
+        
+        dropzone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', () => {
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        invoiceNumberInput.addEventListener('input', updateProcessButton);
+
+        function updateProcessButton() {
+            processBtn.disabled = !uploadedFile || !invoiceNumberInput.value.trim();
+        }
+
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                showAlert('Kun Excel filer (.xlsx, .xls) er tilladt', 'error');
+                return;
+            }
+
+            uploadedFile = file;
+            
+            fileInfo.innerHTML = `
+                <div class="file-info">
+                    <div class="file-icon">📊</div>
+                    <div class="file-details">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-meta">${(file.size / 1024).toFixed(2)} KB</div>
+                    </div>
+                </div>
+            `;
+            fileInfo.classList.remove('hidden');
+
+            processFile(file);
+        }
+
+        function processFile(file) {
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+
+                    // Filter for "Dansk Omsorgspleje" only
+                    const filtered = jsonData.filter(row => {
+                        const afdeling = row['Afdeling'] || '';
+                        return afdeling.toLowerCase().includes('dansk omsorgspleje');
+                    });
+
+                    processedData = filtered;
+
+                    // Show statistics
+                    showStatistics(jsonData.length, filtered.length);
+                    updateProcessButton();
+
+                    if (filtered.length === 0) {
+                        showAlert('Ingen rækker fundet med "Dansk Omsorgspleje" i Afdeling kolonnen', 'error');
+                    } else {
+                        showAlert(`Filtreret: ${filtered.length} rækker fundet for Dansk Omsorgspleje`, 'success');
+                    }
+                } catch (error) {
+                    showAlert('Fejl ved læsning af Excel fil: ' + error.message, 'error');
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
+        }
+
+        function showStatistics(total, filtered) {
+            const totalHours = processedData.reduce((sum, row) => sum + (row['Timer'] || 0), 0);
+            
+            statsInfo.innerHTML = `
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Total Rækker</div>
+                        <div class="stat-value">${total}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Filtreret</div>
+                        <div class="stat-value">${filtered}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Total Timer</div>
+                        <div class="stat-value">${totalHours.toFixed(1)}</div>
+                    </div>
+                </div>
+            `;
+            statsInfo.classList.remove('hidden');
+        }
+
+        function showAlert(message, type) {
+            const icon = type === 'success' ? '✓' : '⚠';
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = `
+                <span class="alert-icon">${icon}</span>
+                <div>${message}</div>
+            `;
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alert);
+        }
+
+        processBtn.addEventListener('click', generatePDF);
+
+        function generatePDF() {
+            if (!processedData || processedData.length === 0) {
+                showAlert('Ingen data at generere PDF fra', 'error');
+                return;
+            }
+
+            const invoiceNumber = invoiceNumberInput.value.trim();
+            if (!invoiceNumber) {
+                showAlert('Indtast venligst et fakturanummer', 'error');
+                return;
+            }
+
+            // Show loading state
+            processBtn.disabled = true;
+            btnText.textContent = 'Genererer PDF...';
+            btnSpinner.classList.remove('hidden');
+
+            setTimeout(() => {
+                try {
+                    const { jsPDF } = window.jspdf;
+                    const doc = new jsPDF();
+
+                    // Header
+                    doc.setFontSize(18);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`FAKTURA ${invoiceNumber}`, 105, 20, { align: 'center' });
+
+                    // From section
+                    doc.setFontSize(10);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Fra: MR Rekruttering', 14, 35);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text('Valbygårdsvej 1, 4. th, 2500 Valby', 14, 40);
+                    doc.text('CVR.nr. 45090965', 14, 45);
+                    doc.text('Tlf: 71747290', 14, 50);
+                    doc.text('Web: www.akutvikar.com', 14, 55);
+
+                    // To section
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Til: DANSK OMSORGSPLEJE APS', 14, 65);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text('CVR: 42092630', 14, 70);
+                    doc.text('Frederiksborgvej 14, st, 3200 Helsinge', 14, 75);
+
+                    // Invoice date
+                    const today = new Date().toLocaleDateString('da-DK');
+                    doc.text(`Fakturadato: ${today}`, 14, 85);
+
+                    // Prepare table data with rates
+                    let subtotal = 0;
+                    const tableData = processedData.map(row => {
+                        const date = formatDate(row['Dato']);
+                        const employee = row['Medarbejder'] || '';
+                        const startTime = formatTime(row['Starttid']);
+                        const endTime = formatTime(row['Sluttid']);
+                        const hours = row['Timer'] || 0;
+                        const personalegruppe = mapPersonalegruppe(row['Personalegruppe']);
+                        const jobfunction = extractLocation(row['Jobfunktion']);
+                        
+                        // Calculate rate based on personnel type and time
+                        const rate = calculateRate(personalegruppe, startTime, date);
+                        const lineTotal = hours * rate;
+                        subtotal += lineTotal;
+                        
+                        return [
+                            date,
+                            employee,
+                            `${startTime}-${endTime}`,
+                            hours.toFixed(1),
+                            personalegruppe,
+                            jobfunction,
+                            'Nej',
+                            rate.toFixed(0),
+                            lineTotal.toFixed(2)
+                        ];
+                    });
+
+                    // Add table
+                    doc.autoTable({
+                        startY: 95,
+                        head: [['Dato', 'Medarbejder', 'Tidsperiode', 'Timer', 'Personale', 'Jobfunktion', 'Helligdag', 'Takst', 'Samlet']],
+                        body: tableData,
+                        styles: { fontSize: 8, cellPadding: 2 },
+                        headStyles: { fillColor: [15, 23, 42], textColor: 255 },
+                        columnStyles: {
+                            3: { halign: 'right' },
+                            7: { halign: 'right' },
+                            8: { halign: 'right' }
+                        },
+                        margin: { left: 14, right: 14 }
+                    });
+
+                    // Calculate totals
+                    const totalHours = processedData.reduce((sum, row) => sum + (row['Timer'] || 0), 0);
+                    const moms = subtotal * 0.25;
+                    const total = subtotal + moms;
+
+                    // Financial summary
+                    const finalY = doc.lastAutoTable.finalY + 10;
+                    doc.setFontSize(10);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text(`Subtotal:`, 140, finalY);
+                    doc.text(`${subtotal.toFixed(2)} kr`, 195, finalY, { align: 'right' });
+                    
+                    doc.text(`Moms (25%):`, 140, finalY + 5);
+                    doc.text(`${moms.toFixed(2)} kr`, 195, finalY + 5, { align: 'right' });
+                    
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(`Total inkl. moms:`, 140, finalY + 10);
+                    doc.text(`${total.toFixed(2)} kr`, 195, finalY + 10, { align: 'right' });
+
+                    // Bank details
+                    doc.setFontSize(9);
+                    doc.setFont('helvetica', 'normal');
+                    const bankY = finalY + 20;
+                    doc.text('Bank: Finseta | IBAN: GB79TCCL04140404627601 | BIC: TCCLGB3LXXX', 14, bankY);
+                    doc.text('Betalingsbetingelser: Bankoverførsel. Fakturanr. bedes angivet ved betaling.', 14, bankY + 5);
+
+                    // Save PDF - this triggers the download
+                    const filename = `Faktura_${invoiceNumber}_Dansk_Omsorgspleje.pdf`;
+                    doc.save(filename);
+                    
+                    showAlert(`✓ PDF "${filename}" er downloadet til din computer!`, 'success');
+                } catch (error) {
+                    console.error('PDF Error:', error);
+                    showAlert('Fejl ved generering af PDF: ' + error.message, 'error');
+                } finally {
+                    // Reset button state
+                    processBtn.disabled = false;
+                    btnText.textContent = 'Generer PDF Faktura';
+                    btnSpinner.classList.add('hidden');
+                }
+            }, 300);
+        }
+
+        function calculateRate(personalegruppe, startTime, date) {
+            // Base rates
+            const baseRates = {
+                'ufaglært': 175,
+                'assistent': 220,
+                'hjælper': 200
+            };
+
+            let rate = baseRates[personalegruppe] || 175;
+
+            // Evening/night shift bonus (after 15:00 or before 07:00)
+            const hour = parseInt(startTime.split(':')[0]);
+            if (hour >= 15 || hour < 7) {
+                rate += 35; // Evening/night bonus
+            }
+
+            // Weekend bonus (Saturday/Sunday)
+            const dateObj = new Date(date);
+            const dayOfWeek = dateObj.getDay();
+            if (dayOfWeek === 0 || dayOfWeek === 6) {
+                rate += 40; // Weekend bonus
+            }
+
+            return rate;
+        }
+
+        function formatDate(dateValue) {
+            if (!dateValue) return '';
+            
+            // Handle Excel date serial number
+            if (typeof dateValue === 'number') {
+                const date = new Date((dateValue - 25569) * 86400 * 1000);
+                return date.toLocaleDateString('da-DK');
+            }
+            
+            // Handle string date
+            if (typeof dateValue === 'string') {
+                const date = new Date(dateValue);
+                if (!isNaN(date)) {
+                    return date.toLocaleDateString('da-DK');
+                }
+            }
+            
+            return dateValue;
+        }
+
+        function formatTime(timeValue) {
+            if (!timeValue) return '';
+            
+            // Handle Excel time serial number (fraction of day)
+            if (typeof timeValue === 'number' && timeValue < 1) {
+                const totalMinutes = Math.round(timeValue * 24 * 60);
+                const hours = Math.floor(totalMinutes / 60);
+                const minutes = totalMinutes % 60;
+                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+            }
+            
+            // Handle time string
+            if (typeof timeValue === 'string') {
+                return timeValue.substring(0, 5); // Get HH:MM
+            }
+            
+            return timeValue;
+        }
+
+        function mapPersonalegruppe(gruppe) {
+            if (!gruppe) return '';
+            const lower = gruppe.toLowerCase();
+            if (lower.includes('ufaglært')) return 'ufaglært';
+            if (lower.includes('assistent')) return 'assistent';
+            if (lower.includes('hjælper')) return 'hjælper';
+            return gruppe;
+        }
+
+        function extractLocation(jobfunction) {
+            if (!jobfunction) return '';
+            // Extract simplified location
+            const parts = jobfunction.split('-');
+            return parts.length > 1 ? parts[1].trim() : jobfunction;
+        }
+    </script>
+</body>
+</html>
