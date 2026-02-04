@@ -389,16 +389,26 @@
         <div class="card">
             <div class="card-title">
                 <span>1</span>
-                Fakturanummer
+                Faktura Detaljer
             </div>
             <div class="input-group">
-                <label for="invoiceNumber">Indtast fakturanummer</label>
+                <label for="invoiceNumber">Fakturanummer</label>
                 <input 
                     type="text" 
                     id="invoiceNumber" 
                     placeholder="f.eks. 164"
                     required
                 >
+            </div>
+            <div class="input-group">
+                <label for="holidays">Helligdage (én dato pr. linje)</label>
+                <textarea 
+                    id="holidays" 
+                    placeholder="01.01.2026&#10;05.04.2026&#10;06.04.2026"
+                    rows="4"
+                    style="width: 100%; padding: 0.875rem 1rem; border: 2px solid var(--border); border-radius: 10px; font-size: 1rem; font-family: 'JetBrains Mono', monospace; background: var(--bg); resize: vertical;"
+                ></textarea>
+                <small style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; display: block;">Format: dd.mm.yyyy (f.eks. 01.01.2026)</small>
             </div>
         </div>
 
@@ -438,9 +448,11 @@
         const btnSpinner = document.getElementById('btnSpinner');
         const alertContainer = document.getElementById('alertContainer');
         const invoiceNumberInput = document.getElementById('invoiceNumber');
+        const holidaysInput = document.getElementById('holidays');
 
         let uploadedFile = null;
         let processedData = null;
+        let holidays = [];
 
         // Drag and drop handlers
         dropzone.addEventListener('click', () => fileInput.click());
@@ -595,7 +607,7 @@
                     doc.setFont('helvetica', 'bold');
                     doc.text(`FAKTURA ${invoiceNumber}`, 105, 20, { align: 'center' });
 
-                    // From section
+                    // From section (LEFT SIDE)
                     doc.setFontSize(10);
                     doc.setFont('helvetica', 'bold');
                     doc.text('Fra: MR Rekruttering', 14, 35);
@@ -605,16 +617,19 @@
                     doc.text('Tlf: 71747290', 14, 50);
                     doc.text('Web: www.akutvikar.com', 14, 55);
 
-                    // To section
+                    // To section (RIGHT SIDE)
                     doc.setFont('helvetica', 'bold');
-                    doc.text('Til: DANSK OMSORGSPLEJE APS', 14, 65);
+                    doc.text('Til: DANSK OMSORGSPLEJE APS', 110, 35);
                     doc.setFont('helvetica', 'normal');
-                    doc.text('CVR: 42092630', 14, 70);
-                    doc.text('Frederiksborgvej 14, st, 3200 Helsinge', 14, 75);
+                    doc.text('CVR: 42092630', 110, 40);
+                    doc.text('Frederiksborgvej 14, st, 3200 Helsinge', 110, 45);
 
                     // Invoice date
                     const today = new Date().toLocaleDateString('da-DK');
-                    doc.text(`Fakturadato: ${today}`, 14, 85);
+                    doc.text(`Fakturadato: ${today}`, 14, 65);
+
+                    // Parse holidays
+                    holidays = parseHolidays(holidaysInput.value);
 
                     // Prepare table data with rates
                     let subtotal = 0;
@@ -627,8 +642,9 @@
                         const personalegruppe = mapPersonalegruppe(row['Personalegruppe']);
                         const jobfunction = extractLocation(row['Jobfunktion']);
                         
-                        // Calculate rate based on personnel type and time
-                        const rate = calculateRate(personalegruppe, startTime, date);
+                        // Calculate rate based on new pricing structure
+                        const isHoliday = isDateHoliday(date, holidays);
+                        const rate = calculateRate(startTime, date, isHoliday);
                         const lineTotal = hours * rate;
                         subtotal += lineTotal;
                         
@@ -639,7 +655,7 @@
                             hours.toFixed(1),
                             personalegruppe,
                             jobfunction,
-                            'Nej',
+                            isHoliday ? 'Ja' : 'Nej',
                             rate.toFixed(0),
                             lineTotal.toFixed(2)
                         ];
@@ -647,7 +663,7 @@
 
                     // Add table
                     doc.autoTable({
-                        startY: 95,
+                        startY: 75,
                         head: [['Dato', 'Medarbejder', 'Tidsperiode', 'Timer', 'Personale', 'Jobfunktion', 'Helligdag', 'Takst', 'Samlet']],
                         body: tableData,
                         styles: { fontSize: 8, cellPadding: 2 },
@@ -703,30 +719,106 @@
             }, 300);
         }
 
-        function calculateRate(personalegruppe, startTime, date) {
-            // Base rates
-            const baseRates = {
-                'ufaglært': 175,
-                'assistent': 220,
-                'hjælper': 200
-            };
-
-            let rate = baseRates[personalegruppe] || 175;
-
-            // Evening/night shift bonus (after 15:00 or before 07:00)
-            const hour = parseInt(startTime.split(':')[0]);
-            if (hour >= 15 || hour < 7) {
-                rate += 35; // Evening/night bonus
+        function parseHolidays(holidayText) {
+            if (!holidayText || !holidayText.trim()) return [];
+            
+            const lines = holidayText.split('\n');
+            const parsedDates = [];
+            
+            for (let line of lines) {
+                line = line.trim();
+                if (!line) continue;
+                
+                // Parse Danish date format dd.mm.yyyy
+                const parts = line.split('.');
+                if (parts.length === 3) {
+                    const day = parseInt(parts[0]);
+                    const month = parseInt(parts[1]) - 1; // JavaScript months are 0-indexed
+                    const year = parseInt(parts[2]);
+                    
+                    if (!isNaN(day) && !isNaN(month) && !isNaN(year)) {
+                        parsedDates.push(new Date(year, month, day));
+                    }
+                }
             }
+            
+            return parsedDates;
+        }
 
-            // Weekend bonus (Saturday/Sunday)
-            const dateObj = new Date(date);
+        function isDateHoliday(dateStr, holidayList) {
+            if (!holidayList || holidayList.length === 0) return false;
+            
+            // Parse the date string
+            let checkDate;
+            if (dateStr.includes('.')) {
+                // Format: dd.mm.yyyy
+                const parts = dateStr.split('.');
+                checkDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            } else if (dateStr.includes('/')) {
+                // Format: dd/mm/yyyy
+                const parts = dateStr.split('/');
+                checkDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            } else {
+                checkDate = new Date(dateStr);
+            }
+            
+            // Compare with holiday list
+            for (let holiday of holidayList) {
+                if (checkDate.getDate() === holiday.getDate() &&
+                    checkDate.getMonth() === holiday.getMonth() &&
+                    checkDate.getFullYear() === holiday.getFullYear()) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        function calculateRate(startTime, date, isHoliday) {
+            // New rate structure:
+            // Helligdag (highest priority): 350 kr
+            // Weekend: 300 kr (both dag and aften)
+            // Aftenvagt (15:00+): Monday-Friday: 280 kr
+            // Dagvagt: Monday-Friday: 255 kr
+            
+            // Priority 1: Holiday (always 350 kr regardless of time/day)
+            if (isHoliday) {
+                return 350;
+            }
+            
+            // Check if weekend
+            const dateObj = parseDateString(date);
             const dayOfWeek = dateObj.getDay();
-            if (dayOfWeek === 0 || dayOfWeek === 6) {
-                rate += 40; // Weekend bonus
+            const isWeekend = (dayOfWeek === 0 || dayOfWeek === 6); // Sunday = 0, Saturday = 6
+            
+            // Priority 2: Weekend (300 kr for both day and evening)
+            if (isWeekend) {
+                return 300;
             }
+            
+            // Priority 3: Weekday rates (Monday-Friday)
+            const hour = parseInt(startTime.split(':')[0]);
+            const isEvening = (hour >= 15); // Evening shift starts at 15:00
+            
+            if (isEvening) {
+                return 280; // Aftenvagt mandag-fredag
+            } else {
+                return 255; // Dagvagt mandag-fredag
+            }
+        }
 
-            return rate;
+        function parseDateString(dateStr) {
+            if (dateStr.includes('.')) {
+                // Format: dd.mm.yyyy
+                const parts = dateStr.split('.');
+                return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            } else if (dateStr.includes('/')) {
+                // Format: dd/mm/yyyy  
+                const parts = dateStr.split('/');
+                return new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+            } else {
+                return new Date(dateStr);
+            }
         }
 
         function formatDate(dateValue) {
